@@ -1,3 +1,4 @@
+
 import sys
 import time
 import threading
@@ -5,8 +6,8 @@ from pynput import mouse, keyboard
 from PyQt5.QtWidgets import (QApplication, QWidget, QLabel,
                              QPushButton, QVBoxLayout, QHBoxLayout,
                              QRadioButton, QSpinBox, QGroupBox, QMessageBox,
-                             QFrame, QFormLayout)
-from PyQt5.QtCore import QPropertyAnimation, QEasingCurve
+                             QFrame, QFormLayout, QStatusBar)
+from PyQt5.QtCore import QPropertyAnimation, QEasingCurve, QTimer
 from PyQt5.QtGui import QFont, QPalette, QColor, QLinearGradient, QBrush
 
 
@@ -16,10 +17,17 @@ class AutoClickerGUI(QWidget):
 
         self.auto_clicker = AutoClicker()
         self.initUI()
+        self.cps = 0
+        self.click_count = 0
+
+        # Таймер для обновления CPS
+        self.cps_timer = QTimer(self)
+        self.cps_timer.timeout.connect(self.update_cps)
+        self.cps_timer.start(1000)  # Обновлять каждую секунду
 
     def initUI(self):
         self.setWindowTitle("Современный Автокликер")  # Заголовок окна
-        self.setGeometry(100, 100, 600, 400)  # Размеры и позиция окна
+        self.setGeometry(100, 100, 600, 500)  # Размеры и позиция окна
 
         # --- Цветовая палитра (градиент и мягкие цвета) ---
         palette = QPalette()
@@ -46,7 +54,7 @@ class AutoClickerGUI(QWidget):
         font_button = QFont("Arial", 12, QFont.Bold)
 
         # --- Интерфейс и стили CSS ---
-        self.setStyleSheet("""
+        self.setStyleSheet(""" 
             QWidget {
                 font-family: Arial, sans-serif;
                 font-size: 12px;
@@ -130,10 +138,35 @@ class AutoClickerGUI(QWidget):
 
         interval_group.setLayout(interval_layout)
 
-        # --- Разделитель ---
-        separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
-        separator.setFrameShadow(QFrame.Sunken)
+        # --- Тип клика ---
+        click_type_group = QGroupBox("Тип Клика")
+        click_type_group.setFont(font_title)
+        click_type_layout = QVBoxLayout()
+
+        self.single_click_radio = QRadioButton("Одиночный Клик")
+        self.single_click_radio.setChecked(True)
+
+        self.double_click_radio = QRadioButton("Двойной Клик")
+
+        click_type_layout.addWidget(self.single_click_radio)
+        click_type_layout.addWidget(self.double_click_radio)
+
+        click_type_group.setLayout(click_type_layout)
+
+        # --- Кнопка мыши ---
+        mouse_button_group = QGroupBox("Кнопка Мыши")
+        mouse_button_group.setFont(font_title)
+        mouse_button_layout = QVBoxLayout()
+
+        self.left_button_radio = QRadioButton("Левая Кнопка")
+        self.left_button_radio.setChecked(True)
+
+        self.right_button_radio = QRadioButton("Правая Кнопка")
+
+        mouse_button_layout.addWidget(self.left_button_radio)
+        mouse_button_layout.addWidget(self.right_button_radio)
+
+        mouse_button_group.setLayout(mouse_button_layout)
 
         # --- Позиция курсора ---
         position_group = QGroupBox("Позиция Курсора")
@@ -161,6 +194,10 @@ class AutoClickerGUI(QWidget):
 
         position_group.setLayout(position_layout)
 
+        # --- Статус ---
+        self.status_label = QLabel("Статус: Ожидание... CPS: 0")
+        self.status_label.setStyleSheet("color: green;")
+
         # --- Кнопки ---
         button_layout = QHBoxLayout()
 
@@ -174,12 +211,19 @@ class AutoClickerGUI(QWidget):
         button_layout.addWidget(self.start_button)
         button_layout.addWidget(self.stop_button)
 
+        # --- Кнопка сброса настроек ---
+        reset_button = QPushButton("Сбросить Настройки")
+        reset_button.clicked.connect(self.reset_settings)
+
         # --- Главный макет ---
         main_layout = QVBoxLayout()
         main_layout.addWidget(interval_group)
-        main_layout.addWidget(separator)
+        main_layout.addWidget(click_type_group)
+        main_layout.addWidget(mouse_button_group)
         main_layout.addWidget(position_group)
-        main_layout.addLayout(button_layout)
+        main_layout.addWidget(self.status_label)
+        main_layout.addLayout(button_layout)  # Замените addWidget на addLayout
+        main_layout.addWidget(reset_button)
 
         self.setLayout(main_layout)
 
@@ -198,6 +242,9 @@ class AutoClickerGUI(QWidget):
                 raise ValueError("Интервал кликов не может быть равен 0!")
 
             delay = (hours * 3600 + minutes * 60 + seconds) + milliseconds / 1000
+            if delay <= 0:
+                raise ValueError("Интервал кликов должен быть больше 0!")
+
             self.auto_clicker.set_delay(delay)
 
             if self.current_location_radio.isChecked():
@@ -207,10 +254,24 @@ class AutoClickerGUI(QWidget):
                 y = self.y_input.value()
                 self.auto_clicker.set_click_position("fixed", x, y)
 
-            self.auto_clicker.start_clicking()
+            # Установка типа клика
+            if self.single_click_radio.isChecked():
+                self.auto_clicker.set_click_type("single")
+            elif self.double_click_radio.isChecked():
+                self.auto_clicker.set_click_type("double")
+
+            # Установка кнопки мыши
+            if self.left_button_radio.isChecked():
+                self.auto_clicker.set_mouse_button("left")
+            elif self.right_button_radio.isChecked():
+                self.auto_clicker.set_mouse_button("right")
+
+            self.click_count = 0 #сбрасываем счетчик кликов перед началом
+            self.auto_clicker.start_clicking(self.increment_click_count)
             self.start_button.setEnabled(False)
             self.stop_button.setEnabled(True)
-            self.animateButton(self.stop_button, True)
+            self.status_label.setText("Статус: Автокликер работает... CPS: 0")
+            self.status_label.setStyleSheet("color: red;")
 
         except ValueError as e:
             QMessageBox.warning(self, "Ошибка", str(e), QMessageBox.Ok)
@@ -219,7 +280,8 @@ class AutoClickerGUI(QWidget):
         self.auto_clicker.stop_clicking()
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
-        self.animateButton(self.stop_button, False)
+        self.status_label.setText("Статус: Ожидание... CPS: 0")
+        self.status_label.setStyleSheet("color: green;")
 
     def on_press(self, key):
         if key == keyboard.Key.f6:
@@ -227,6 +289,20 @@ class AutoClickerGUI(QWidget):
                 self.stop_clicking()
             else:
                 self.start_clicking()
+
+    def reset_settings(self):
+        # Сброс значений
+        self.hours_input.setValue(0)
+        self.minutes_input.setValue(0)
+        self.seconds_input.setValue(0)
+        self.milliseconds_input.setValue(0)
+        self.x_input.setValue(0)
+        self.y_input.setValue(0)
+        self.single_click_radio.setChecked(True)
+        self.left_button_radio.setChecked(True)
+        self.current_location_radio.setChecked(True)
+        self.status_label.setText("Статус: Ожидание... CPS: 0")
+        self.status_label.setStyleSheet("color: green;")
 
     def animateButton(self, button, start):
         color_start = QColor("#356cb3") if start else QColor("#d9534f")
@@ -239,8 +315,16 @@ class AutoClickerGUI(QWidget):
         self.animation.setEasingCurve(QEasingCurve.InOutQuad)
         self.animation.start()
 
+    def increment_click_count(self):
+        self.click_count += 1
 
-class AutoClicker:  # Логика автокликера
+    def update_cps(self):
+        self.cps = self.click_count
+        self.click_count = 0
+        if self.auto_clicker.running:
+            self.status_label.setText(f"Статус: Автокликер работает... CPS: {self.cps}")
+
+class AutoClicker:
     def __init__(self):
         self.running = False
         self.delay = 0.1
@@ -249,6 +333,7 @@ class AutoClicker:  # Логика автокликера
         self.click_position = "current"
         self.x = None
         self.y = None
+        self.click_callback = None
 
     def set_delay(self, delay):
         self.delay = delay
@@ -261,8 +346,12 @@ class AutoClicker:  # Логика автокликера
         self.x = x
         self.y = y
 
-    def start_clicking(self):
+    def set_click_type(self, click_type):
+        self.click_type = click_type
+
+    def start_clicking(self, click_callback):
         self.running = True
+        self.click_callback = click_callback
         threading.Thread(target=self.click_loop, daemon=True).start()
 
     def stop_clicking(self):
@@ -280,7 +369,11 @@ class AutoClicker:  # Логика автокликера
             elif self.click_type == "double":
                 mouse_controller.click(self.button, 2)
 
-            time.sleep(self.delay)
+            if self.click_callback:
+                self.click_callback()
+
+            if self.delay > 0: #Добавлена проверка
+                time.sleep(self.delay)
 
 
 if __name__ == "__main__":
