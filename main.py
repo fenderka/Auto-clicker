@@ -1,4 +1,3 @@
-
 import sys
 import time
 import threading
@@ -6,7 +5,7 @@ from pynput import mouse, keyboard
 from PyQt5.QtWidgets import (QApplication, QWidget, QLabel,
                              QPushButton, QVBoxLayout, QHBoxLayout,
                              QRadioButton, QSpinBox, QGroupBox, QMessageBox,
-                             QFrame, QFormLayout, QStatusBar)
+                             QFormLayout)
 from PyQt5.QtCore import QPropertyAnimation, QEasingCurve, QTimer
 from PyQt5.QtGui import QFont, QPalette, QColor, QLinearGradient, QBrush
 
@@ -26,7 +25,7 @@ class AutoClickerGUI(QWidget):
         self.cps_timer.start(1000)  # Обновлять каждую секунду
 
     def initUI(self):
-        self.setWindowTitle("Современный Автокликер")  # Заголовок окна
+        self.setWindowTitle("auto-clicker")  # Заголовок окна
         self.setGeometry(100, 100, 600, 500)  # Размеры и позиция окна
 
         # --- Цветовая палитра (градиент и мягкие цвета) ---
@@ -242,9 +241,6 @@ class AutoClickerGUI(QWidget):
                 raise ValueError("Интервал кликов не может быть равен 0!")
 
             delay = (hours * 3600 + minutes * 60 + seconds) + milliseconds / 1000
-            if delay <= 0:
-                raise ValueError("Интервал кликов должен быть больше 0!")
-
             self.auto_clicker.set_delay(delay)
 
             if self.current_location_radio.isChecked():
@@ -266,7 +262,7 @@ class AutoClickerGUI(QWidget):
             elif self.right_button_radio.isChecked():
                 self.auto_clicker.set_mouse_button("right")
 
-            self.click_count = 0 #сбрасываем счетчик кликов перед началом
+            self.click_count = 0  # сбрасываем счетчик кликов перед началом
             self.auto_clicker.start_clicking(self.increment_click_count)
             self.start_button.setEnabled(False)
             self.stop_button.setEnabled(True)
@@ -324,6 +320,7 @@ class AutoClickerGUI(QWidget):
         if self.auto_clicker.running:
             self.status_label.setText(f"Статус: Автокликер работает... CPS: {self.cps}")
 
+
 class AutoClicker:
     def __init__(self):
         self.running = False
@@ -372,8 +369,7 @@ class AutoClicker:
             if self.click_callback:
                 self.click_callback()
 
-            if self.delay > 0: #Добавлена проверка
-                time.sleep(self.delay)
+            time.sleep(self.delay)
 
 
 if __name__ == "__main__":
